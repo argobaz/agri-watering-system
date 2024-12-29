@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Monitoring Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1 style="text-align: center; margin-bottom: 2rem;">Field Monitoring Dashboard</h1>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('sensors')">Sensor Data</button>
+                <button class="tab" onclick="showTab('cameras')">Cameras</button>
+            </div>
+
+            <div id="sensors-tab">
+                <div class="input-group">
+                    <label>Temperature (°C)</label>
+                    <input type="number" id="temperature" value="{{ sensor_data.temperature }}"
+                           onchange="updateSensor('temperature', this.value)">
+                </div>
+
+                <div class="input-group">
+                    <label>Humidity (%)</label>
+                    <input type="number" id="humidity" value="{{ sensor_data.humidity }}"
+                           onchange="updateSensor('humidity', this.value)">
+                </div>
+
+                <div class="input-group">
+                    <label>Soil pH</label>
+                    <input type="number" id="soil_ph" value="{{ sensor_data.soil_ph }}"
+                           onchange="updateSensor('soil_ph', this.value)">
+                </div>
+
+                <div class="sensor-grid">
+                    {% for i in range(3) %}
+                    <div class="card">
+                        <label>Moisture Sensor {{ i + 1 }}</label>
+                        <input type="number" 
+                               value="{{ sensor_data.moisture_sensors[i] }}"
+                               onchange="updateMoistureSensor({{ i }}, this.value)"
+                               min="0" max="100">
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="card">
+                    <div id="moisture-alert" class="alert {% if moisture_avg < thresholds.LOW %}alert-warning{% elif moisture_avg > thresholds.HIGH %}alert-success{% endif %}">
+                        Average Moisture: <span id="moisture-avg">{{ "%.1f"|format(moisture_avg) }}</span>%
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <button id="watering-btn" 
+                                onclick="toggleWatering()"
+                                class="{{ 'danger' if sensor_data.is_watering else '' }}">
+                            {{ 'Stop Watering' if sensor_data.is_watering else 'Start Watering' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="cameras-tab" style="display: none;">
+                <div class="sensor-grid">
+                    {% for i in range(3) %}
+                    <button onclick="selectCamera({{ i + 1 }})">Camera {{ i + 1 }}</button>
+                    {% endfor %}
+                </div>
+                <div class="card" style="text-align: center;">
+                    <p id="camera-view">Select a camera to view the feed</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+            
+            document.getElementById('sensors-tab').style.display = tabName === 'sensors' ? 'block' : 'none';
+            document.getElementById('cameras-tab').style.display = tabName === 'cameras' ? 'block' : 'none';
+        }
+
+        async function updateSensor(type, value) {
+            const response = await fetch('/update_sensor', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ type, value })
+            });
+            const data = await response.json();
+            updateMoistureDisplay(data.moisture_avg);
+        }
+
+        async function updateMoistureSensor(index, value) {
+            const response = await fetch('/update_sensor', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ type: 'moisture', index, value })
+            });
+            const data = await response.json();
+            updateMoistureDisplay(data.moisture_avg);
+        }
+
+        function updateMoistureDisplay(avg) {
+            document.getElementById('moisture-avg').textContent = avg.toFixed(1);
+            const alert = document.getElementById('moisture-alert');
+            alert.className = 'alert';
+            if (avg < {{ thresholds.LOW }}) {
+                alert.classList.add('alert-warning');
+            } else if (avg > {{ thresholds.HIGH }}) {
+                alert.classList.add('alert-success');
+            }
+        }
+
+        async function toggleWatering() {
+            const response = await fetch('/toggle_watering', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+            const data = await response.json();
+            
+            const btn = document.getElementById('watering-btn');
+            btn.textContent = data.is_watering ? 'Stop Watering' : 'Start Watering';
+            btn.className = data.is_watering ? 'danger' : '';
+        }
+
+        function selectCamera(number) {
+            document.getElementById('camera-view').textContent = `Viewing Camera ${number}`;
+        }
+    </script>
+</body>
+</html>
